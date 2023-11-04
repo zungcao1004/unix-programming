@@ -236,8 +236,8 @@ void print_long_format(char *directory, struct dirent *dirp)
 void option_switches(int argc, char **argv)
 {
     int option;
-    // ae làm thêm features thì nhớ coi option của mình làm nó thuộc nhóm nào, tham khảo source code. search ls.c google là ra.
-    while ((option = getopt(argc, argv, "alut:A:S")) != -1)
+    // làm thêm cái nào thì add case vào, không cần sửa dòng bên dưới
+    while ((option = getopt(argc, argv, "abcdfghiklmnopqrstuvw:xABCDFGHI:LNQRST:UXZ1")) != -1)
     {
         switch (option)
         {
