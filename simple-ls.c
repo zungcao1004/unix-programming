@@ -36,7 +36,6 @@ int main(int argc, char **argv)
 
     print_dir(directory, include_hidden, display_details);
 
-
     return 0;
 }
 
@@ -219,4 +218,3 @@ void option_switches(int argc, char **argv)
         }
     }
 }
-
