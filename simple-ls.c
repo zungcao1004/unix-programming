@@ -13,14 +13,21 @@
 #include <grp.h>
 #include <linux/limits.h>
 
+// Cụm 1
 int include_hidden = 0;            // -a
 int display_details = 0;           // -l
 int sort_by_access_time = 0;       // -u
 int sort_by_modification_time = 0; // -t
+
+// Cụm 2
 int list_all_except_dot = 0;       // -A
+
+// Cụm 3
 int sort_by_size = 0;              // -S
+
 struct dirent **namelist = NULL;
 
+// Khai báo lại các hàm bên dưới 
 void option_switches(int argc, char **argv);
 void print_dir(char *directory, int include_hidden, int display_details, int sort_by_size);
 void print_long_format(char *directory, struct dirent *dirp);
@@ -29,11 +36,13 @@ void sort_files_by_size(const char *directory);
 
 int main(int argc, char **argv)
 {
-    // Get the directory (if provided) else current directory
+    // Nếu chỉ gọi ./simple-ls thì tự hiểu thư mục là "." (thư mục hiện tại), còn nếu ./simple-ls [thư mục] thì directory=[thư mục]
     char *directory = (optind < argc) ? argv[optind] : ".";
 
+    // Bật các flags theo các options được gọi tương ứng
     option_switches(argc, argv);
 
+    // ae làm thêm function thì nhớ add vào print_dir, tham khảo các function đã làm ở dưới để code chung concept cho dễ sửa  
     print_dir(directory, include_hidden, display_details, sort_by_size);
 
     return 0;
@@ -49,15 +58,17 @@ void print_dir(char *directory, int include_hidden, int display_details, int sor
         perror("opendir");
         exit(EXIT_FAILURE);
     }
-
+    // Trường hợp 1: cụm -A và -S không được gọi
     if (list_all_except_dot == 0 && sort_by_size == 0)
     {
         while ((dirp = readdir(dir)) != NULL)
         {
+            // in file ẩn (có dấu '.' ở đầu)
             if (include_hidden == 0 && dirp->d_name[0] == '.')
             {
                 continue;
             }
+            // in stat của file
             if (display_details)
             {
                 print_long_format(directory, dirp);
@@ -65,7 +76,7 @@ void print_dir(char *directory, int include_hidden, int display_details, int sor
             printf(" %s\n", dirp->d_name);
         }
     }
-
+    // Trường hợp 2: cụm -alut và -S không được gọi
     if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && sort_by_size == 0)
     {
         if (list_all_except_dot)
@@ -73,7 +84,7 @@ void print_dir(char *directory, int include_hidden, int display_details, int sor
             // TODO
         }
     }
-
+    // Trường hợp 3: cụm -alut và -A không được gọi
     if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && list_all_except_dot == 0)
     {
         if (sort_by_size)
@@ -225,6 +236,7 @@ void print_long_format(char *directory, struct dirent *dirp)
 void option_switches(int argc, char **argv)
 {
     int option;
+    // ae làm thêm features thì nhớ coi option của mình làm nó thuộc nhóm nào, tham khảo source code. search ls.c google là ra.
     while ((option = getopt(argc, argv, "alut:A:S")) != -1)
     {
         switch (option)
