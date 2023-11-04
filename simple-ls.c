@@ -1,6 +1,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
@@ -17,11 +18,14 @@ int display_details = 0;           // -l
 int sort_by_access_time = 0;       // -u
 int sort_by_modification_time = 0; // -t
 int list_all_except_dot = 0;       // -A
-int sort_by_file_size = 0;         // -S
+int sort_by_size = 0;         // -S
+char *current_directory = NULL;
 
 void option_switches(int argc, char **argv);
 void print_dir(char *directory, int include_hidden, int display_details);
 void print_long_format(char *directory, struct dirent *dirp);
+int compare_file_size(const void *a, const void *b);
+void sort_files_by_size();
 
 int main(int argc, char **argv)
 {
@@ -31,6 +35,7 @@ int main(int argc, char **argv)
     option_switches(argc, argv);
 
     print_dir(directory, include_hidden, display_details);
+
 
     return 0;
 }
@@ -60,6 +65,70 @@ void print_dir(char *directory, int include_hidden, int display_details)
 
     closedir(dir);
 }
+
+
+
+int compare_file_size(const void *a, const void *b) {
+    struct dirent *entry_a = *(struct dirent **)a;
+    struct dirent *entry_b = *(struct dirent **)b;
+
+    struct stat stat_a, stat_b;
+    stat(entry_a->d_name, &stat_a);
+    stat(entry_b->d_name, &stat_b);
+
+    return stat_b.st_size - stat_a.st_size; // Sort largest first
+}
+
+
+void sort_files_by_size(const char *directory) {
+    // Open the specified directory
+    DIR *dp = opendir(directory);
+    struct dirent *dirp;
+
+    if (dp == NULL) {
+        fprintf(stderr, "Unable to open '%s': %s\n", directory, strerror(errno));
+        return;
+    }
+
+    struct dirent **namelist;
+    int num_files = 0;
+
+    while ((dirp = readdir(dp)) != NULL) {
+        if (dirp->d_name[0] != '.') {  // Skip hidden files
+            num_files++;
+        }
+    }
+
+    if (num_files == 0) {
+        closedir(dp);
+        return;
+    }
+
+    // Rewind the directory stream to the beginning
+    rewinddir(dp);
+
+    namelist = (struct dirent **)malloc(num_files * sizeof(struct dirent *));
+
+    int i = 0;
+    while ((dirp = readdir(dp)) != NULL) {
+        if (dirp->d_name[0] != '.') {  // Skip hidden files
+            namelist[i++] = dirp;
+        }
+    }
+
+    qsort(namelist, num_files, sizeof(struct dirent *), compare_file_size);
+
+    for (int j = 0; j < num_files; j++) {
+        printf("%s\n", namelist[j]->d_name);
+    }
+
+    closedir(dp);
+
+    // Free memory used for namelist
+    free(namelist);
+}
+
+
 
 void print_long_format(char *directory, struct dirent *dirp)
 {
@@ -142,7 +211,7 @@ void option_switches(int argc, char **argv)
             list_all_except_dot = 1;
             break;
         case 'S':
-            sort_by_file_size = 1;
+            sort_by_size = 1;
             break;
         default:
             fprintf(stderr, "Invalid option\n");
@@ -150,3 +219,4 @@ void option_switches(int argc, char **argv)
         }
     }
 }
+
