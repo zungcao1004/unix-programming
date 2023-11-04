@@ -3,6 +3,7 @@
         "stdlib.h": "c",
         "getopt.h": "c",
         "time.h": "c",
-        "limits.h": "c"
+        "limits.h": "c",
+        "dirent.h": "c"
     }
 }

@@ -18,28 +18,28 @@ int display_details = 0;           // -l
 int sort_by_access_time = 0;       // -u
 int sort_by_modification_time = 0; // -t
 int list_all_except_dot = 0;       // -A
-int sort_by_size = 0;         // -S
-char *current_directory = NULL;
+int sort_by_size = 0;              // -S
+struct dirent **namelist = NULL;
 
 void option_switches(int argc, char **argv);
-void print_dir(char *directory, int include_hidden, int display_details);
+void print_dir(char *directory, int include_hidden, int display_details, int sort_by_size);
 void print_long_format(char *directory, struct dirent *dirp);
 int compare_file_size(const void *a, const void *b);
-void sort_files_by_size();
+void sort_files_by_size(const char *directory);
 
 int main(int argc, char **argv)
 {
-    // Get the directory (if provided)
+    // Get the directory (if provided) else current directory
     char *directory = (optind < argc) ? argv[optind] : ".";
 
     option_switches(argc, argv);
 
-    print_dir(directory, include_hidden, display_details);
+    print_dir(directory, include_hidden, display_details, sort_by_size);
 
     return 0;
 }
 
-void print_dir(char *directory, int include_hidden, int display_details)
+void print_dir(char *directory, int include_hidden, int display_details, int sort_by_size)
 {
     DIR *dir;
     struct dirent *dirp;
@@ -49,85 +49,120 @@ void print_dir(char *directory, int include_hidden, int display_details)
         perror("opendir");
         exit(EXIT_FAILURE);
     }
-    while ((dirp = readdir(dir)) != NULL)
+
+    if (list_all_except_dot == 0 && sort_by_size == 0)
     {
-        if (!include_hidden && dirp->d_name[0] == '.')
+        while ((dirp = readdir(dir)) != NULL)
         {
-            continue;
+            if (include_hidden == 0 && dirp->d_name[0] == '.')
+            {
+                continue;
+            }
+            if (display_details)
+            {
+                print_long_format(directory, dirp);
+            }
+            printf(" %s\n", dirp->d_name);
         }
-        if (display_details)
+    }
+
+    if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && sort_by_size == 0)
+    {
+        if (list_all_except_dot)
         {
-            print_long_format(directory, dirp);
+            // TODO
         }
-        printf(" %s\n", dirp->d_name);
+    }
+
+    if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && list_all_except_dot == 0)
+    {
+        if (sort_by_size)
+        {
+            sort_files_by_size(directory);
+        }
     }
 
     closedir(dir);
 }
 
-
-
-int compare_file_size(const void *a, const void *b) {
+int compare_file_size(const void *a, const void *b)
+{
     struct dirent *entry_a = *(struct dirent **)a;
     struct dirent *entry_b = *(struct dirent **)b;
 
+    char path_a[PATH_MAX], path_b[PATH_MAX];
+    snprintf(path_a, PATH_MAX, "%s/%s", namelist[0]->d_name, entry_a->d_name);
+    snprintf(path_b, PATH_MAX, "%s/%s", namelist[0]->d_name, entry_b->d_name);
+
     struct stat stat_a, stat_b;
-    stat(entry_a->d_name, &stat_a);
-    stat(entry_b->d_name, &stat_b);
+    stat(path_a, &stat_a);
+    stat(path_b, &stat_b);
 
     return stat_b.st_size - stat_a.st_size; // Sort largest first
 }
 
+void sort_files_by_size(const char *directory)
+{
 
-void sort_files_by_size(const char *directory) {
-    // Open the specified directory
-    DIR *dp = opendir(directory);
-    struct dirent *dirp;
+    int num_files = scandir(directory, &namelist, NULL, alphasort); // dùng vscode báo lỗi thì kệ nó, compile bình thường
 
-    if (dp == NULL) {
-        fprintf(stderr, "Unable to open '%s': %s\n", directory, strerror(errno));
+    if (num_files < 0)
+    {
+        fprintf(stderr, "Unable to scan '%s': %s\n", directory, strerror(errno));
         return;
     }
 
-    struct dirent **namelist;
-    int num_files = 0;
-
-    while ((dirp = readdir(dp)) != NULL) {
-        if (dirp->d_name[0] != '.') {  // Skip hidden files
-            num_files++;
+    // Filter out hidden files and directories (those starting with '.')
+    int visible_files = 0;
+    for (int i = 0; i < num_files; i++)
+    {
+        if (namelist[i]->d_name[0] != '.')
+        {
+            visible_files++;
         }
     }
 
-    if (num_files == 0) {
-        closedir(dp);
+    // Create an array to store the visible files
+    struct dirent **visible_files_list = (struct dirent **)malloc(visible_files * sizeof(struct dirent *));
+    if (visible_files_list == NULL)
+    {
+        perror("malloc");
         return;
     }
 
-    // Rewind the directory stream to the beginning
-    rewinddir(dp);
-
-    namelist = (struct dirent **)malloc(num_files * sizeof(struct dirent *));
-
-    int i = 0;
-    while ((dirp = readdir(dp)) != NULL) {
-        if (dirp->d_name[0] != '.') {  // Skip hidden files
-            namelist[i++] = dirp;
+    int visible_idx = 0;
+    for (int i = 0; i < num_files; i++)
+    {
+        if (namelist[i]->d_name[0] != '.')
+        {
+            visible_files_list[visible_idx++] = namelist[i];
         }
     }
 
-    qsort(namelist, num_files, sizeof(struct dirent *), compare_file_size);
+    // Custom sorting based on file size in descending order
+    qsort(visible_files_list, visible_files, sizeof(struct dirent *), compare_file_size);
 
-    for (int j = 0; j < num_files; j++) {
-        printf("%s\n", namelist[j]->d_name);
+    // Print the sorted list with file name and size
+    for (int i = 0; i < visible_files; i++)
+    {
+        struct dirent *file = visible_files_list[i];
+        struct stat st;
+        char path[PATH_MAX];
+        snprintf(path, PATH_MAX, "%s/%s", directory, file->d_name);
+        if (stat(path, &st) == -1)
+        {
+            perror("stat");
+            continue;
+        }
+        printf("%s %lld\n", file->d_name, (long long)st.st_size);
     }
 
-    closedir(dp);
-
-    // Free memory used for namelist
+    for (int i = 0; i < num_files; i++)
+    {
+        free(namelist[i]);
+    }
     free(namelist);
 }
-
-
 
 void print_long_format(char *directory, struct dirent *dirp)
 {
