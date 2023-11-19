@@ -58,9 +58,6 @@ void print_dir(char *directory, int include_hidden, int display_details, int sor
         perror("opendir");
         exit(EXIT_FAILURE);
     }
-    // Trường hợp 1: cụm -A và -S không được gọi
-    if (list_all_except_dot == 0 && sort_by_size == 0)
-    {
         while ((dirp = readdir(dir)) != NULL)
         {
             // in file ẩn (có dấu '.' ở đầu)
@@ -75,23 +72,14 @@ void print_dir(char *directory, int include_hidden, int display_details, int sor
             }
             printf(" %s\n", dirp->d_name);
         }
-    }
-    // Trường hợp 2: cụm -alut và -S không được gọi
-    if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && sort_by_size == 0)
-    {
         if (list_all_except_dot)
         {
             // TODO
         }
-    }
-    // Trường hợp 3: cụm -alut và -A không được gọi
-    if ((include_hidden == 0 && display_details == 0 && sort_by_access_time == 0 && sort_by_modification_time == 0) && list_all_except_dot == 0)
-    {
         if (sort_by_size)
         {
             sort_files_by_size(directory);
         }
-    }
 
     closedir(dir);
 }
