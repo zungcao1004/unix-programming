@@ -13,31 +13,26 @@
 #include <grp.h>
 #include <linux/limits.h>
 
-int exclude_hidden = 1;  // -a
+int include_hidden = 0;  // -a
 int display_details = 0; // -l
-
 int list_all_except_dot = 0; // -A
-
 int sort_by_size = 0; // -S
 
 struct dirent **namelist = NULL;
 
-// Khai báo lại các hàm bên dưới
-void option_switches(int argc, char **argv);
 void print_dir(char *directory);
-void print_long_format(char *directory, struct dirent *dirp);
-int compare_file_size(const void *a, const void *b);
+void option_switches(int argc, char **argv);
+void print_all_hidden(DIR *dir, struct dirent *dirp);
+void print_long_format(char *directory, DIR *dir, struct dirent *dirp);
+void print_all_except_dot(DIR *dir, struct dirent *dirp);
 void sort_files_by_size(const char *directory);
+int compare_file_size(const void *a, const void *b);
 
 int main(int argc, char **argv)
 {
-    // Nếu chỉ gọi ./simple-ls thì tự hiểu thư mục là "." (thư mục hiện tại), còn nếu ./simple-ls [thư mục] thì directory=[thư mục]
     char *directory = (optind < argc) ? argv[optind] : ".";
-
-    // Bật các flags theo các options được gọi tương ứng
     option_switches(argc, argv);
 
-    // ae làm thêm function thì nhớ add vào print_dir, tham khảo các function đã làm ở dưới để code chung concept cho dễ sửa
     print_dir(directory);
 
     return 0;
@@ -53,24 +48,20 @@ void print_dir(char *directory)
         perror("opendir");
         exit(EXIT_FAILURE);
     }
-    while ((dirp = readdir(dir)) != NULL)
+
+    if (include_hidden)
     {
-        // in file ẩn (có dấu '.' ở đầu)
-        // dùng exclude vì mặc định đã in các file ẩn
-        if (!exclude_hidden && dirp->d_name[0] == '.')
-        {
-            continue;
-        }
-        // in stat của file
-        if (display_details)
-        {
-            print_long_format(directory, dirp);
-        }
-        if (list_all_except_dot && dirp->d_name[0] == '.')
-        {
-            continue;
-        }
-        printf(" %s\n", dirp->d_name);
+        print_all_hidden(dir, dirp);
+    }
+
+    if (display_details)
+    {
+        print_long_format(directory, dir, dirp);
+    }
+
+    if (list_all_except_dot)
+    {
+        print_all_except_dot(dir, dirp);
     }
 
     if (sort_by_size)
@@ -78,7 +69,107 @@ void print_dir(char *directory)
         sort_files_by_size(directory);
     }
 
+    else
+    {
+        while ((dirp = readdir(dir)) != NULL)
+        {
+            if (dirp->d_name[0] == '.')
+            {
+                continue;
+            }
+            printf(" %s\n", dirp->d_name);
+        }
+    }
+
     closedir(dir);
+}
+
+void print_all_hidden(DIR *dir, struct dirent *dirp)
+{
+    while ((dirp = readdir(dir)) != NULL)
+    {
+        printf(" %s\n", dirp->d_name);
+    }
+}
+
+void print_all_except_dot(DIR *dir, struct dirent *dirp)
+{
+    while ((dirp = readdir(dir)) != NULL)
+    {
+        if (dirp->d_name[0] == '.' && (dirp->d_name[1] == '\0' || (dirp->d_name[1] == '.' && dirp->d_name[2] == '\0')))
+        {
+            continue;
+        }
+
+        printf(" %s\n", dirp->d_name);
+    }
+}
+
+void print_long_format(char *directory, DIR *dir, struct dirent *dirp)
+{
+    while ((dirp = readdir(dir)) != NULL)
+
+    {
+        if (dirp->d_name[0] == '.')
+        {
+            continue;
+        }
+        char filename[PATH_MAX];
+        snprintf(filename, sizeof(filename), "%s/%s", directory, dirp->d_name);
+        struct stat file_stat;
+        if (stat(filename, &file_stat) == -1)
+        {
+            perror("stat");
+            exit(EXIT_FAILURE);
+        }
+
+        // File type and permissions
+        printf((S_ISDIR(file_stat.st_mode)) ? "d" : "-");
+        printf((file_stat.st_mode & S_IRUSR) ? "r" : "-");
+        printf((file_stat.st_mode & S_IWUSR) ? "w" : "-");
+        printf((file_stat.st_mode & S_IXUSR) ? "x" : "-");
+        printf((file_stat.st_mode & S_IRGRP) ? "r" : "-");
+        printf((file_stat.st_mode & S_IWGRP) ? "w" : "-");
+        printf((file_stat.st_mode & S_IXGRP) ? "x" : "-");
+        printf((file_stat.st_mode & S_IROTH) ? "r" : "-");
+        printf((file_stat.st_mode & S_IWOTH) ? "w" : "-");
+        printf((file_stat.st_mode & S_IXOTH) ? "x" : "-");
+
+        // Number of links
+        printf(" %ld", file_stat.st_nlink);
+
+        // Owner name
+        struct passwd *pw = getpwuid(file_stat.st_uid);
+        if (pw != NULL)
+        {
+            printf(" %s", pw->pw_name);
+        }
+        else
+        {
+            printf(" %d", file_stat.st_uid);
+        }
+
+        // Group name
+        struct group *gr = getgrgid(file_stat.st_gid);
+        if (gr != NULL)
+        {
+            printf(" %s", gr->gr_name);
+        }
+        else
+        {
+            printf(" %d", file_stat.st_gid);
+        }
+
+        // File size
+        printf(" %lld", (long long)file_stat.st_size);
+
+        // File modification time
+        struct tm *modified_time = localtime(&file_stat.st_mtime);
+        char time_str[80];
+        strftime(time_str, sizeof(time_str), "%b %d %H:%M", modified_time);
+        printf(" %s", time_str);
+        printf(" %s\n", dirp->d_name);
+    }
 }
 
 int compare_file_size(const void *a, const void *b)
@@ -160,68 +251,6 @@ void sort_files_by_size(const char *directory)
     free(namelist);
 }
 
-void print_long_format(char *directory, struct dirent *dirp)
-{
-    char filename[PATH_MAX];
-    snprintf(filename, sizeof(filename), "%s/%s", directory, dirp->d_name);
-    struct stat file_stat;
-    if (stat(filename, &file_stat) == -1)
-    {
-        perror("stat");
-        exit(EXIT_FAILURE);
-    }
-
-    // File type and permissions
-    printf((S_ISDIR(file_stat.st_mode)) ? "d" : "-");
-    printf((file_stat.st_mode & S_IRUSR) ? "r" : "-");
-    printf((file_stat.st_mode & S_IWUSR) ? "w" : "-");
-    printf((file_stat.st_mode & S_IXUSR) ? "x" : "-");
-    printf((file_stat.st_mode & S_IRGRP) ? "r" : "-");
-    printf((file_stat.st_mode & S_IWGRP) ? "w" : "-");
-    printf((file_stat.st_mode & S_IXGRP) ? "x" : "-");
-    printf((file_stat.st_mode & S_IROTH) ? "r" : "-");
-    printf((file_stat.st_mode & S_IWOTH) ? "w" : "-");
-    printf((file_stat.st_mode & S_IXOTH) ? "x" : "-");
-
-    // Number of links
-    printf(" %ld", file_stat.st_nlink);
-
-    // Owner name
-    struct passwd *pw = getpwuid(file_stat.st_uid);
-    if (pw != NULL)
-    {
-        printf(" %s", pw->pw_name);
-    }
-    else
-    {
-        printf(" %d", file_stat.st_uid);
-    }
-
-    // Group name
-    struct group *gr = getgrgid(file_stat.st_gid);
-    if (gr != NULL)
-    {
-        printf(" %s", gr->gr_name);
-    }
-    else
-    {
-        printf(" %d", file_stat.st_gid);
-    }
-
-    // File size
-    printf(" %lld", (long long)file_stat.st_size);
-
-    // File modification time
-    struct tm *modified_time = localtime(&file_stat.st_mtime);
-    char time_str[80];
-    strftime(time_str, sizeof(time_str), "%b %d %H:%M", modified_time);
-    printf(" %s", time_str);
-}
-
-void print_all_except_dot(char *directory)
-{
-}
-
 void option_switches(int argc, char **argv)
 {
     int option;
@@ -231,7 +260,7 @@ void option_switches(int argc, char **argv)
         switch (option)
         {
         case 'a':
-            exclude_hidden = 0;
+            include_hidden = 1;
             break;
         case 'l':
             display_details = 1;

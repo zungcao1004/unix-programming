@@ -4,6 +4,7 @@
         "getopt.h": "c",
         "time.h": "c",
         "limits.h": "c",
-        "dirent.h": "c"
+        "dirent.h": "c",
+        "cstdlib": "c"
     }
 }
